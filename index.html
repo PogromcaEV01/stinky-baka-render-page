@@ -448,11 +448,6 @@
         ui.opStatus.innerText = "[ ] Przeciwnik pisze..."; ui.opStatus.style.color = "#555";
         ui.voteYes.classList.remove('hidden'); ui.voteNo.classList.remove('hidden');
         ui.voteWait.classList.add('hidden'); 
-       
-       // Dodaje systemowy separator nowej rundy na czacie
-        if (state.round > 1) {
-            appendChat("SYSTEM", `--- ROZPOCZĘTO RUNDĘ ${state.round} ---`, "msg-sys");
-        }
 
         if(state.myRole === 'poisoner') {
             ui.roleTitle.innerText = `> RUNDA ${state.round}/5 | NALEWASZ TRUCIZNĘ`;
