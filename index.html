@@ -183,6 +183,27 @@
 </div>
 
 <script>
+   // Funkcja sprawdzająca czy serwer PeerJS żyje
+async function checkServerStatus() {
+    const statusEl = document.getElementById('status');
+    const url = `https://${PEER_CONFIG.host}${PEER_CONFIG.path}/id?${Date.now()}`;
+    
+    try {
+        const response = await fetch(url);
+        if (response.ok) {
+            statusEl.innerText = "[ SERWER ONLINE - MOŻNA GRAĆ ]";
+            statusEl.style.color = "#0f0";
+        }
+    } catch (e) {
+        statusEl.innerText = "[ SERWER SIĘ BUDZI... PROSZĘ CZEKAĆ (do 1 min) ]";
+        statusEl.style.color = "#ff0";
+        // Ponów próbę za 5 sekund
+        setTimeout(checkServerStatus, 5000);
+    }
+}
+
+// Uruchom sprawdzanie po załadowaniu strony
+window.onload = checkServerStatus;
     // --- KONFIGURACJA TWOJEGO SERWERA RENDER / RAILWAY ---
     const PEER_CONFIG = {
         host: 'TWOJA-NAZWA.onrender.com', // <-- TUTAJ WPISZ SWÓJ ADRES Z RENDERA/RAILWAY (bez https://)
