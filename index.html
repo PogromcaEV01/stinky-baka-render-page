@@ -102,6 +102,9 @@
 <body>
 
 <h1>> POJEDYNEK UMYSŁÓW_</h1>
+<div id="server-indicator" style="margin-bottom: 15px; padding: 5px 10px; border: 1px solid #555; display: inline-block; font-size: 0.8em;">
+    STATUS SERWERA: <span id="server-dot" style="color: #f00;">●</span> <span id="server-text">INICJALIZACJA...</span>
+</div>
 <div id="status">[ INICJALIZACJA SYSTEMU... ]</div>
 
 <div id="lobby-panel" class="panel">
@@ -184,12 +187,45 @@
 
 <script>
     // --- KONFIGURACJA TWOJEGO SERWERA RENDER / RAILWAY ---
-    const PEER_CONFIG = {
-        host: 'stinky-baka-render-server.onrender.com', // <-- TUTAJ WPISZ SWÓJ ADRES Z RENDERA/RAILWAY (bez https://)
-        port: 443,
-        path: '/myapp',
-        secure: true
-    };
+   // --- KONFIGURACJA TWOJEGO SERWERA ---
+const PEER_CONFIG = {
+    host: 'stinky-baka-render-server.onrender.com', // <-- Pamiętaj, by tu wpisać swój adres
+    port: 443,
+    path: '/myapp',
+    secure: true,
+    debug: 1
+};
+
+let peer = null, conn = null, mmPeer = null;
+const serverDot = document.getElementById('server-dot');
+const serverText = document.getElementById('server-text');
+
+// Funkcja sprawdzająca stan serwera
+function checkServerStatus() {
+    serverDot.style.color = "#ff0"; // Żółty - próba połączenia
+    serverText.innerText = "BUDZENIE SERWERA...";
+
+    // Tworzymy tymczasowy obiekt Peer, żeby sprawdzić czy serwer odpowiada
+    const testPeer = new Peer(PEER_CONFIG);
+
+    testPeer.on('open', () => {
+        serverDot.style.color = "#0f0"; // Zielony - działa
+        serverText.innerText = "ONLINE (GOTOWY)";
+        testPeer.destroy(); // Zamykamy testowe połączenie
+    });
+
+    testPeer.on('error', (err) => {
+        serverDot.style.color = "#f00"; // Czerwony - błąd
+        serverText.innerText = "OFFLINE (USYPIA)";
+        console.error("PeerJS Error:", err);
+        
+        // Jeśli serwer śpi, ponów próbę za 5 sekund
+        setTimeout(checkServerStatus, 5000);
+    });
+}
+
+// Uruchom sprawdzenie przy starcie strony
+window.onload = checkServerStatus;
 
     let peer = null;
     let conn = null;
