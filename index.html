@@ -228,68 +228,92 @@
 
     ui.status.innerText = "[ GOTOWY DO POŁĄCZENIA ]";
 
-    // --- MATCHMAKING Z PREFIXAMI ---
-    function searchRank(rank) {
-        ui.disconnectMsg.classList.add('hidden');
-        ui.queueStatus.classList.remove('hidden');
-        ui.queueText.innerText = `Przeszukuję sieć (Ranga ${rank})`;
-        
-        // Unikalne ID kolejki zabezpieczone prefixem
-        let queueId = `trucizna_v1_rank_${rank}`;
+ // --- MATCHMAKING Z PREFIXAMI (NAPRAWIONY) ---
+    let isMatchmaking = false; // Flaga zapobiegająca błędom przy spamowaniu przycisków
 
-        if(mmPeer) mmPeer.destroy();
-        mmPeer = new Peer(PEER_CONFIG);
+    function searchRank(rank) {
+        ui.disconnectMsg.classList.add('hidden');
+        ui.queueStatus.classList.remove('hidden');
+        ui.queueText.innerText = `Przeszukuję sieć (Ranga ${rank})`;
+        
+        let queueId = `trucizna_v1_rank_${rank}`;
 
-        mmPeer.on('open', () => {
-            let tempConn = mmPeer.connect(queueId, { reliable: true });
+        if(mmPeer) mmPeer.destroy();
+        mmPeer = new Peer(PEER_CONFIG);
+        isMatchmaking = true;
 
-            queueTimeout = setTimeout(() => {
-                if(tempConn) tempConn.close();
-                mmPeer.destroy();
-                becomeQueueHost(queueId);
-            }, 4000);
+        mmPeer.on('open', () => {
+            if(!isMatchmaking) return;
+            
+            let tempConn = mmPeer.connect(queueId, { reliable: true });
 
+            // Bezpiecznik czasu (zwiększony na 6s dla słabszych sieci mobilnych)
+            queueTimeout = setTimeout(() => {
+                if(tempConn) tempConn.close();
+                mmPeer.destroy();
+                becomeQueueHost(queueId);
+            }, 6000);
+
+            tempConn.on('open', () => {
+                clearTimeout(queueTimeout);
+                ui.queueText.innerText = `Przeciwnik znaleziony! Nawiązywanie...`;
+
+                tempConn.on('data', (msg) => {
+                    if(msg.type === 'MATCH_FOUND') {
+                        isMatchmaking = false;
+                        mmPeer.destroy();
+                        setTimeout(() => joinPrivateMatch(msg.data), 500);
+                    }
+                });
+            });
+            
+            // KLUCZOWE: Jeśli host nie istnieje, PeerJS wyrzuci ten błąd od razu.
+            // Dzięki temu nie czekamy w ciemno na timeout, tylko od razu robimy pokój.
+            mmPeer.on('error', (err) => {
+                if (err.type === 'peer-unavailable') {
+                    clearTimeout(queueTimeout);
+                    mmPeer.destroy();
+                    becomeQueueHost(queueId);
+                }
+            });
+        });
+    }
+
+    function becomeQueueHost(queueId) {
+        if(!isMatchmaking) return;
+        ui.queueText.innerText = `Kolejka pusta. Tworzę poczekalnię, oczekiwanie...`;
+        
+        mmPeer = new Peer(queueId, PEER_CONFIG);
+        
+        mmPeer.on('connection', (tempConn) => {
+            ui.queueText.innerText = `Ktoś dołączył! Budowanie pokoju...`;
+            
+            // KLUCZOWE: Musimy poczekać aż kanał będzie 'open' żeby wysłać dane
             tempConn.on('open', () => {
-                clearTimeout(queueTimeout);
-                ui.queueText.innerText = `Przeciwnik znaleziony! Nawiązywanie...`;
+                let secretRoomId = 'match_' + Math.floor(Math.random() * 999999);
 
-                tempConn.on('data', (msg) => {
-                    if(msg.type === 'MATCH_FOUND') {
-                        mmPeer.destroy();
-                        setTimeout(() => joinPrivateMatch(msg.data), 500);
-                    }
-                });
+                hostPrivateMatch(secretRoomId, () => {
+                    tempConn.send({ type: 'MATCH_FOUND', data: secretRoomId });
+                    isMatchmaking = false;
+                    setTimeout(() => { if(mmPeer) mmPeer.destroy(); }, 2000);
+                });
             });
-        });
-    }
+        });
 
-    function becomeQueueHost(queueId) {
-        ui.queueText.innerText = `Kolejka pusta. Tworzę poczekalnię, oczekiwanie...`;
-        
-        mmPeer = new Peer(queueId, PEER_CONFIG);
-        
-        mmPeer.on('connection', (tempConn) => {
-            ui.queueText.innerText = `Ktoś dołączył! Budowanie pokoju...`;
-            let secretRoomId = 'match_' + Math.floor(Math.random() * 999999);
+        mmPeer.on('error', (err) => {
+            if(err.type === 'unavailable-id') {
+                // Ktoś inny zajął miejsce ułamek sekundy przed nami, próbujemy ponownie
+                setTimeout(() => searchRank(queueId.slice(-1)), 1000);
+            }
+        });
+    }
 
-            hostPrivateMatch(secretRoomId, () => {
-                tempConn.send({ type: 'MATCH_FOUND', data: secretRoomId });
-                setTimeout(() => { if(mmPeer) mmPeer.destroy(); }, 2000);
-            });
-        });
-
-        mmPeer.on('error', (err) => {
-            if(err.type === 'unavailable-id') {
-                setTimeout(() => searchRank(queueId.slice(-1)), 1000);
-            }
-        });
-    }
-
-    function cancelSearch() {
-        clearTimeout(queueTimeout);
-        if(mmPeer) mmPeer.destroy();
-        ui.queueStatus.classList.add('hidden');
-    }
+    function cancelSearch() {
+        isMatchmaking = false;
+        clearTimeout(queueTimeout);
+        if(mmPeer) mmPeer.destroy();
+        ui.queueStatus.classList.add('hidden');
+    }
 
     // --- POKOJE PRYWATNE Z PREFIXAMI ---
     function hostPrivateMatch(roomId, onReadyCallback = null) {
